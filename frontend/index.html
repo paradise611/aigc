@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>赛博错题医生</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">+</div>
+          <div>
+            <h1>赛博错题医生</h1>
+            <p>AI 思维诊疗系统</p>
+          </div>
+        </div>
+
+        <nav class="nav-tabs" aria-label="主导航">
+          <button class="nav-button active" data-view="chat">
+            <span class="nav-icon">⌁</span>
+            主聊天
+          </button>
+          <button class="nav-button" data-view="history">
+            <span class="nav-icon">≡</span>
+            聊天历史
+          </button>
+          <button class="nav-button" data-view="analysis">
+            <span class="nav-icon">◌</span>
+            错题分析
+          </button>
+        </nav>
+
+        <section class="status-panel">
+          <div class="status-row">
+            <span>模型状态</span>
+            <strong id="modelStatus">检测中</strong>
+          </div>
+          <div class="status-row">
+            <span>诊疗模式</span>
+            <strong>错因溯源</strong>
+          </div>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <section class="view active" id="chatView" aria-labelledby="chatTitle">
+          <header class="view-header">
+            <div>
+              <p class="kicker">AI TEACHER CLINIC</p>
+              <h2 id="chatTitle">把错题发来，我帮你定位“为什么会错”。</h2>
+            </div>
+            <button class="ghost-button" id="newChatButton" title="新建问诊">＋ 新建</button>
+          </header>
+
+          <div class="chat-layout">
+            <section class="chat-panel">
+              <div class="message-list" id="messageList">
+                <article class="message assistant">
+                  <div class="avatar">AI</div>
+                  <div class="bubble">
+                    <p>你好，我是赛博错题医生。你可以输入题目、你的作答步骤、困惑点，也可以先粘贴一段错题描述。我会从错误位置、错误类型和认知修复建议三层帮你复盘。</p>
+                  </div>
+                </article>
+              </div>
+
+              <form class="composer" id="chatForm">
+                <label class="upload-button" title="图片上传演示入口">
+                  <input type="file" id="imageInput" accept="image/*" />
+                  ⧉
+                </label>
+                <textarea id="messageInput" rows="2" placeholder="输入错题、作答步骤或困惑点..."></textarea>
+                <button class="primary-button" type="submit">发送</button>
+              </form>
+              <p class="input-hint" id="uploadHint">支持文本问诊；图片入口会把文件名作为上下文附加到问题中。</p>
+            </section>
+
+            <aside class="coach-panel">
+              <h3>问诊流程</h3>
+              <ol class="steps">
+                <li><span>1</span>识别题目与作答过程</li>
+                <li><span>2</span>定位第一处错误节点</li>
+                <li><span>3</span>归因到概念、审题、步骤或计算</li>
+                <li><span>4</span>生成同类训练建议</li>
+              </ol>
+              <div class="mini-metrics">
+                <div>
+                  <strong id="historyCount">0</strong>
+                  <span>问诊记录</span>
+                </div>
+                <div>
+                  <strong id="mistakeCount">0</strong>
+                  <span>错题档案</span>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" id="historyView" aria-labelledby="historyTitle">
+          <header class="view-header">
+            <div>
+              <p class="kicker">CONVERSATION ARCHIVE</p>
+              <h2 id="historyTitle">聊天历史记录</h2>
+            </div>
+            <button class="ghost-button" id="refreshHistoryButton">刷新</button>
+          </header>
+          <div class="history-grid">
+            <div class="list-panel" id="historyList"></div>
+            <div class="detail-panel">
+              <h3 id="historyDetailTitle">选择一条记录</h3>
+              <div class="history-detail" id="historyDetail"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="analysisView" aria-labelledby="analysisTitle">
+          <header class="view-header">
+            <div>
+              <p class="kicker">ERROR DIAGNOSIS</p>
+              <h2 id="analysisTitle">错题分析页面</h2>
+            </div>
+            <button class="ghost-button" id="refreshMistakesButton">刷新错题本</button>
+          </header>
+
+          <div class="analysis-grid">
+            <form class="analysis-form" id="analysisForm">
+              <h3>快速生成错题档案</h3>
+              <textarea id="analysisInput" rows="8" placeholder="粘贴题目、错误答案或复盘内容..."></textarea>
+              <button class="primary-button" type="submit">开始分析</button>
+              <div class="analysis-output" id="analysisOutput"></div>
+            </form>
+
+            <section class="mistake-book">
+              <div class="toolbar">
+                <select id="subjectFilter">
+                  <option value="">全部学科</option>
+                </select>
+                <select id="errorFilter">
+                  <option value="">全部错因</option>
+                </select>
+              </div>
+              <div class="mistake-list" id="mistakeList"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
