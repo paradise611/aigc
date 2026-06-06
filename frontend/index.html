@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>赛博错题医生</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">+</div>
+          <div>
+            <h1>赛博错题医生</h1>
+            <p>AI 思维诊疗系统</p>
+          </div>
+        </div>
+
+        <nav class="nav-tabs" aria-label="主导航">
+          <button class="nav-button active" data-view="chat">
+            <span class="nav-icon">⌁</span>
+            AI问诊
+          </button>
+          <button class="nav-button" data-view="analysis">
+            <span class="nav-icon">◌</span>
+            错题分析
+          </button>
+        </nav>
+
+        <section class="status-panel">
+          <div class="status-row">
+            <span>模型状态</span>
+            <strong id="modelStatus">检测中</strong>
+          </div>
+          <div class="status-row">
+            <span>诊疗模式</span>
+            <strong>错因溯源</strong>
+          </div>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <section class="view active" id="chatView" aria-labelledby="chatTitle">
+          <header class="view-header">
+            <div>
+              <p class="kicker">AI TEACHER CLINIC</p>
+              <h2 id="chatTitle">把错题发来，我帮你定位“为什么会错”。</h2>
+            </div>
+            <button class="ghost-button" id="newChatButton" title="新建问诊">＋ 新建</button>
+          </header>
+
+          <div class="chat-layout">
+            <section class="chat-panel">
+              <div class="message-list" id="messageList">
+                <article class="message assistant">
+                  <div class="avatar">AI</div>
+                  <div class="bubble">
+                    <p>你好，我是赛博错题医生。你可以输入题目、你的作答步骤、困惑点，也可以先粘贴一段错题描述。我会从错误位置、错误类型和认知修复建议三层帮你复盘。</p>
+                  </div>
+                </article>
+              </div>
+
+              <form class="composer" id="chatForm">
+                <label class="upload-button" title="上传图片">
+                  <input type="file" id="imageInput" accept="image/*" />
+                  ⧉
+                </label>
+                <button type="button" class="voice-button" id="voiceButton" title="语音输入">
+                  🎤
+                </button>
+                <textarea id="messageInput" rows="2" placeholder="输入错题、作答步骤或困惑点..."></textarea>
+                <button class="primary-button" type="submit">发送</button>
+              </form>
+              <p class="input-hint" id="uploadHint">支持文本问诊、图片上传（自动OCR识别）、语音输入。</p>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="analysisView" aria-labelledby="analysisTitle">
+          <div class="analysis-hero">
+            <div class="analysis-hero__icon">🧠</div>
+            <div class="analysis-hero__text">
+              <h2 id="analysisTitle">学习分析</h2>
+              <p class="analysis-hero__subtitle">基于 <strong id="analysisTotal">0</strong> 道错题的智能分析</p>
+            </div>
+          </div>
+
+          <div class="stats-cards">
+            <article class="stat-card stat-card--mastered">
+              <div class="stat-icon stat-icon--mastered">✓</div>
+              <div class="stat-body">
+                <strong class="stat-value" id="statMastered">0</strong>
+                <span class="stat-label">已掌握</span>
+              </div>
+            </article>
+            <article class="stat-card stat-card--difficult">
+              <div class="stat-icon stat-icon--difficult">!</div>
+              <div class="stat-body">
+                <strong class="stat-value" id="statDifficult">0</strong>
+                <span class="stat-label">疑难点</span>
+              </div>
+            </article>
+            <article class="stat-card stat-card--unmastered">
+              <div class="stat-icon stat-icon--unmastered">✕</div>
+              <div class="stat-body">
+                <strong class="stat-value" id="statUnmastered">0</strong>
+                <span class="stat-label">未掌握</span>
+              </div>
+            </article>
+          </div>
+
+          <div class="analysis-tabs" role="tablist" aria-label="学习分析视图">
+            <button class="analysis-tab active" type="button" data-tab="knowledge" role="tab" aria-selected="true">
+              ◎ 知识点分析
+            </button>
+            <button class="analysis-tab" type="button" data-tab="ability" role="tab" aria-selected="false">
+              ↗ 能力分析
+            </button>
+          </div>
+
+          <section class="analysis-panel active" id="knowledgePanel" role="tabpanel">
+            <div class="chart-box">
+              <div class="chart-header">
+                <h3>知识点掌握情况</h3>
+                <p>气泡大小代表出错频率，颜色代表掌握程度</p>
+              </div>
+              <div class="legend-tags">
+                <span class="legend-tag legend-tag--mastered">已掌握 (&ge;80%)</span>
+                <span class="legend-tag legend-tag--difficult">疑难点 (40-80%)</span>
+                <span class="legend-tag legend-tag--unmastered">未掌握 (&lt;40%)</span>
+              </div>
+              <div id="bubble-chart"></div>
+            </div>
+          </section>
+
+          <section class="analysis-panel" id="abilityPanel" role="tabpanel" hidden>
+            <div class="chart-box">
+              <div class="chart-header">
+                <h3>能力分析</h3>
+                <p id="abilitySummary">根据近期错题结构，生成你的能力画像。</p>
+              </div>
+              <div class="ability-grid" id="abilityGrid"></div>
+            </div>
+          </section>
+
+          <section class="analysis-card">
+            <div class="analysis-card__header">
+              <div>
+                <h3>重点错题</h3>
+                <p>保留查看、编辑、删除操作，方便继续复盘。</p>
+              </div>
+            </div>
+            <div class="mistake-insight-list" id="mistakeInsightList"></div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
