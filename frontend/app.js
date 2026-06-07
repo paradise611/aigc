@@ -1,4 +1,4 @@
-﻿// ====== 赛博错题医生 - 前端主脚本 ======
+// ====== 赛博错题医生 - 前端主脚本 ======
 const state = {
   sessionId: null,
   selectedImageBase64: "",
@@ -8,6 +8,8 @@ const state = {
   recognition: null,
   activeAnalysisTab: "knowledge",
   bubbleChart: null,
+  chatHistory: [],
+  currentHistoryId: null,
 };
 
 const els = {
@@ -31,6 +33,8 @@ const els = {
   abilityGrid: document.getElementById("abilityGrid"),
   abilitySummary: document.getElementById("abilitySummary"),
   mistakeInsightList: document.getElementById("mistakeInsightList"),
+  historyList: document.getElementById("historyList"),
+  clearHistoryBtn: document.getElementById("clearHistoryBtn"),
 };
 
 // ====== 页面切换 ======
@@ -63,6 +67,11 @@ function escapeHtml(text) {
 
 function formatText(text) {
   let html = escapeHtml(text);
+
+  // 修复不匹配的 LaTeX 定界符：$$...$ → $$...$$（支持多行）
+  html = html.replace(/\$\$([\s\S]+?)\$(?!\$)/g, "$$$1$$");
+  // 修复 $...$$ → $...$
+  html = html.replace(/(?<!\$)\$([\s\S]+?)\$\$/g, "$$$1$$");
 
   // 处理标题：### xxx 或 ## xxx
   html = html.replace(/^#{2,3}\s*(.+)$/gm, '<strong style="font-size:1.05em">$1</strong>');
@@ -100,12 +109,164 @@ function unique(items) {
   return [...new Set(items)];
 }
 
+// ====== 历史记录管理 (localStorage持久化) ======
+const HISTORY_STORAGE_KEY = "cyber_mistake_chat_history";
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+    state.chatHistory = raw ? JSON.parse(raw) : [];
+  } catch {
+    state.chatHistory = [];
+  }
+  renderHistoryList();
+}
+
+function saveHistoryToStorage() {
+  try {
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(state.chatHistory));
+  } catch {
+    // localStorage 可能已满，忽略
+  }
+}
+
+function renderHistoryList() {
+  if (!els.historyList) return;
+
+  if (!state.chatHistory.length) {
+    els.historyList.innerHTML = '<div class="history-empty">暂无历史记录</div>';
+    return;
+  }
+
+  els.historyList.innerHTML = state.chatHistory
+    .slice()
+    .reverse()
+    .map((item) => {
+      const isActive = item.id === state.currentHistoryId;
+      const title = escapeHtml(item.title || "未命名对话");
+      const time = item.updatedAt ? formatDate(item.updatedAt) : "";
+      return `
+        <div class="history-item${isActive ? " active" : ""}" data-history-id="${item.id}">
+          <div class="history-item__title">${title}</div>
+          <div class="history-item__meta">
+            <span>${time}</span>
+            <button class="history-item__delete" data-action="delete-history" data-history-id="${item.id}">✕</button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function saveCurrentChatToHistory() {
+  const messages = els.messageList.querySelectorAll(".message");
+  if (messages.length === 0) return;
+
+  const msgs = [];
+  messages.forEach((msg) => {
+    const role = msg.classList.contains("user") ? "user" : "assistant";
+    const bubble = msg.querySelector(".bubble");
+    if (bubble) {
+      // Get raw text (innerText preserves visible text without HTML tags)
+      msgs.push({ role, content: bubble.innerText });
+    }
+  });
+
+  if (msgs.length === 0) return;
+
+  // Use first user message as title
+  const firstUser = msgs.find((m) => m.role === "user");
+  const title = firstUser ? firstUser.content.slice(0, 40) : "对话记录";
+
+  const now = new Date().toISOString();
+
+  if (state.currentHistoryId) {
+    // Update existing entry
+    const idx = state.chatHistory.findIndex((h) => h.id === state.currentHistoryId);
+    if (idx >= 0) {
+      state.chatHistory[idx].messages = msgs;
+      state.chatHistory[idx].title = title;
+      state.chatHistory[idx].updatedAt = now;
+    }
+  } else {
+    // Create new entry
+    const id = "hist_" + Date.now();
+    state.chatHistory.push({
+      id,
+      title,
+      messages: msgs,
+      createdAt: now,
+      updatedAt: now,
+    });
+    state.currentHistoryId = id;
+  }
+
+  saveHistoryToStorage();
+  renderHistoryList();
+}
+
+function restoreChat(id) {
+  const item = state.chatHistory.find((h) => h.id === id);
+  if (!item) return;
+
+  state.currentHistoryId = id;
+  els.messageList.innerHTML = "";
+  item.messages.forEach((m) => {
+    appendMessage(m.role, m.content);
+  });
+  renderHistoryList();
+  switchView("chat");
+}
+
+function deleteHistoryItem(id, event) {
+  if (event) event.stopPropagation();
+  state.chatHistory = state.chatHistory.filter((h) => h.id !== id);
+  if (state.currentHistoryId === id) {
+    state.currentHistoryId = null;
+  }
+  saveHistoryToStorage();
+  renderHistoryList();
+}
+
+function clearAllHistory() {
+  if (!confirm("确定清空全部历史记录吗？此操作不可撤销。")) return;
+  state.chatHistory = [];
+  state.currentHistoryId = null;
+  saveHistoryToStorage();
+  renderHistoryList();
+}
+
+// 历史记录点击事件（事件委托）
+els.historyList.addEventListener("click", (e) => {
+  // 删除按钮
+  const delBtn = e.target.closest("[data-action='delete-history']");
+  if (delBtn) {
+    deleteHistoryItem(delBtn.dataset.historyId, e);
+    return;
+  }
+
+  // 点击历史条目
+  const historyItem = e.target.closest(".history-item");
+  if (historyItem) {
+    const id = historyItem.dataset.historyId;
+    if (id) restoreChat(id);
+  }
+});
+
+// 清空历史按钮
+els.clearHistoryBtn.addEventListener("click", clearAllHistory);
+
 // ====== 消息处理 ======
 function appendMessage(role, content) {
   const article = document.createElement("article");
   article.className = `message ${role}`;
   article.innerHTML = `<div class="avatar">${role === "user" ? "我" : "AI"}</div><div class="bubble">${formatText(content)}</div>`;
   els.messageList.appendChild(article);
+  // KaTeX 渲染数学公式
+  const bubble = article.querySelector(".bubble");
+  if (bubble && typeof renderMathInElement !== "undefined") {
+    try { renderMathInElement(bubble, { delimiters: [{ left: "$$", right: "$$", display: true }, { left: "$", right: "$", display: false }] }); } catch (e) {}
+  }
   els.messageList.scrollTop = els.messageList.scrollHeight;
 }
 
@@ -162,6 +323,7 @@ async function submitChat(event) {
     state.sessionId = data.session_id;
     hideThinking();
     appendMessage("assistant", data.reply);
+    saveCurrentChatToHistory();
   } catch (error) {
     hideThinking();
     appendMessage("assistant", `请求失败：${error.message}`);
@@ -172,9 +334,12 @@ async function submitChat(event) {
 }
 
 function startNewChat() {
+  saveCurrentChatToHistory();
   state.sessionId = null;
+  state.currentHistoryId = null;
   els.messageList.innerHTML = "";
   appendMessage("assistant", "新的问诊已经开始。请发来题目、你的原答案和困惑点，我会先定位错误节点，再给出认知修复建议。");
+  renderHistoryList();
 }
 
 // ====== 健康检测 ======
@@ -199,8 +364,8 @@ async function loadMistakes() {
     renderMistakeInsightList(items);
   } catch (error) {
     els.analysisTotal.textContent = "0";
-    els.abilityGrid.innerHTML = `<div class="empty-state">暂时无法生成能力分析</div>`;
-    els.mistakeInsightList.innerHTML = `<div class="empty-state">暂无可展示的错题记录</div>`;
+    els.abilityGrid.innerHTML = '<div class="empty-state">暂时无法生成能力分析</div>';
+    els.mistakeInsightList.innerHTML = '<div class="empty-state">暂无可展示的错题记录</div>';
     if (state.bubbleChart) {
       state.bubbleChart.dispose();
       state.bubbleChart = null;
@@ -220,7 +385,7 @@ function renderStatsCards(items) {
   });
 
   els.analysisTotal.textContent = total;
-  els.statMastered.textContent = mastered;
+  els.statMastered.textContent = buckets.mastered;
   els.statDifficult.textContent = buckets.difficult;
   els.statUnmastered.textContent = buckets.unmastered;
 }
@@ -286,29 +451,80 @@ function renderKnowledgeAnalysis(items) {
       return { ...point, level };
     })
     .sort((a, b) => b.count - a.count)
-    .slice(0, 9);
+    .slice(0, 20);
 
-  // Build ECharts scatter data
-  const seriesData = bubbles.map((item) => {
+  // Build ECharts scatter data with centered, tight-packing bubbles
+  const byCount = [...bubbles].sort((a, b) => a.count - b.count);
+  const byLevel = [...bubbles].sort((a, b) => a.level - b.level);
+  const centerX = 5, centerY = 5;
+  const n = bubbles.length - 1 || 1;
+
+  // Auto-adapt bubble size to fill space
+  const maxCount = Math.max(...bubbles.map(b => b.count), 1);
+  const fillScale = bubbles.length <= 5 ? 1.5 : bubbles.length <= 10 ? 1.2 : 1.0;
+  const baseSize = 55 + (10 - Math.min(bubbles.length, 15)) * 3;
+
+  // Measure actual chart container for accurate px-per-unit ratio
+  const containerWidth = chartDom.clientWidth || 550;
+  const containerHeight = chartDom.clientHeight || 400;
+  const pxPerUnit = Math.min(containerWidth, containerHeight) / 10;
+  const radiusOverestimate = 1.2; // overestimate to ensure zero gaps
+
+  // Build initial nodes with rank-order positions and sizes
+  let nodes = bubbles.map((item) => {
     let color;
     if (item.level >= 80) color = "#32bc73";
     else if (item.level >= 40) color = "#ffaa22";
     else color = "#f2496c";
 
-    // Use pseudo-random positions for visual variety
-    const xSeed = item.name.length * 3.7 + item.count * 1.3;
-    const ySeed = item.count * 7.2 + item.level * 0.8;
-    const x = ((xSeed * 7) % 100) / 10;
-    const y = ((ySeed * 11) % 100) / 10;
-    const size = Math.max(60, Math.min(90, 50 + item.count * 12 + Math.round(item.level / 8)));
+    const xRank = byCount.findIndex(b => b.name === item.name);
+    const yRank = byLevel.findIndex(b => b.name === item.name);
+    const x = centerX + ((xRank / n) - 0.5) * 1.5;
+    const y = centerY + ((yRank / n) - 0.5) * 1.5;
+    const rawSize = baseSize + (item.count / Math.max(maxCount, 1)) * 60 * fillScale;
+    const size = Math.max(55, Math.min(170, Math.round(rawSize)));
+    // radius in chart units using actual container size
+    const radius = (size / 2) / pxPerUnit * radiusOverestimate;
 
-    return {
-      name: item.name,
-      value: [x, y, size],
-      rate: item.level,
-      itemStyle: { color: color },
-    };
+    return { name: item.name, x, y, size, radius, rate: item.level, count: item.count, color };
   });
+
+  // Repulsion simulation: push overlapping apart, pull to center, zero gaps
+  for (let iter = 0; iter < 120; iter++) {
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[j].x - nodes[i].x;
+        const dy = nodes[j].y - nodes[i].y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.001;
+        const minDist = nodes[i].radius + nodes[j].radius;
+        if (dist < minDist) {
+          const force = (minDist - dist) / dist * 0.5;
+          const fx = dx * force;
+          const fy = dy * force;
+          nodes[i].x -= fx;
+          nodes[i].y -= fy;
+          nodes[j].x += fx;
+          nodes[j].y += fy;
+        }
+      }
+    }
+    // Pull toward center, clamp to bounds
+    for (const node of nodes) {
+      node.x += (centerX - node.x) * 0.03;
+      node.y += (centerY - node.y) * 0.03;
+      const pad = node.radius * 0.5;
+      node.x = Math.max(pad, Math.min(10 - pad, node.x));
+      node.y = Math.max(pad, Math.min(10 - pad, node.y));
+    }
+  }
+
+  const seriesData = nodes.map(n => ({
+    name: n.name,
+    value: [n.x, n.y, n.size],
+    rate: n.rate,
+    count: n.count,
+    itemStyle: { color: n.color },
+  }));
 
   const chart = echarts.init(chartDom);
   state.bubbleChart = chart;
@@ -316,12 +532,12 @@ function renderKnowledgeAnalysis(items) {
   const option = {
     tooltip: {
       formatter: function (params) {
-        return params.name + "<br>掌握率: " + params.data.rate + "%";
+        return params.name + "<br>掌握率: " + params.data.rate + "%<br>错题数: " + (params.data.count || 0);
       },
     },
-    xAxis: { show: false },
-    yAxis: { show: false },
-    grid: { left: 0, right: 0, top: 0, bottom: 0 },
+    xAxis: { show: false, min: 0, max: 10 },
+    yAxis: { show: false, min: 0, max: 10 },
+    grid: { left: 5, right: 5, top: 5, bottom: 5 },
     series: [
       {
         type: "scatter",
@@ -333,7 +549,9 @@ function renderKnowledgeAnalysis(items) {
           show: true,
           color: "#fff",
           fontSize: 13,
-          formatter: "{b}\n{c.rate}%",
+          formatter: function (params) {
+            return params.name + "\n" + params.data.rate + "%";
+          },
         },
         emphasis: {
           scale: true,
@@ -398,7 +616,7 @@ function renderMistakeInsightList(items) {
     return;
   }
 
-  els.mistakeInsightList.innerHTML = items.slice(0, 6).map((item) => {
+  els.mistakeInsightList.innerHTML = items.map((item) => {
     const level = getMasteryLevel(item);
     const bucket = getMasteryBucket(level);
     const tags = (item.tags || []).slice(0, 3).map((tag) => `<span class="tag-sm">${escapeHtml(tag)}</span>`).join("");
@@ -592,3 +810,4 @@ window.addEventListener("resize", () => {
 
 // ====== 启动 ======
 loadHealth();
+loadHistory();

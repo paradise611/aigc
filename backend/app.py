@@ -24,8 +24,9 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 DATA_DIR = BASE_DIR / "data"
 DATA_FILE = DATA_DIR / "cyber_mistake_doctor.json"
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+ZHIPU_API_KEY = os.getenv("ZHIPU_API_KEY", "")
+ZHIPU_TEXT_MODEL = os.getenv("ZHIPU_TEXT_MODEL", "glm-4-flash")
+ZHIPU_VISION_MODEL = os.getenv("ZHIPU_VISION_MODEL", "glm-4v-flash")
 
 app = Flask(__name__, static_folder=str(FRONTEND_DIR), static_url_path="")
 
@@ -45,13 +46,14 @@ def ensure_store():
 
 def load_store():
     ensure_store()
-    with DATA_FILE.open("r", encoding="utf-8") as f:
+    with DATA_FILE.open("r", encoding="utf-8-sig") as f:
         return json.load(f)
 
 
 def save_store(store):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    DATA_FILE.write_text(json.dumps(store, ensure_ascii=False, indent=2), encoding="utf-8")
+    with DATA_FILE.open("w", encoding="utf-8", newline="\n") as f:
+        json.dump(store, f, ensure_ascii=False, indent=2)
 
 
 def get_or_create_session(store, session_id=None):
@@ -73,27 +75,31 @@ def get_or_create_session(store, session_id=None):
 
 def infer_subject(text):
     lower = text.lower()
-    if any(token in text for token in ["函数", "方程", "导数", "几何", "概率", "矩阵"]) or re.search(r"\d+\s*[+\-*/=]", text):
+    if any(token in text for token in ["函数", "方程", "导数", "几何", "概率", "矩阵", "数列", "不等式", "三角", "对数", "指数", "积分", "微分", "极限", "向量", "坐标", "圆", "面积", "体积", "勾股", "相似", "全等"]) or re.search(r"\d+\s*[+\-*/=]", text):
         return "数学"
-    if any(token in text for token in ["英语", "完形", "阅读", "语法", "单词"]):
+    if any(token in text for token in ["英语", "完形", "阅读", "语法", "单词", "翻译", "作文", "听力", "时态", "语态", "从句", "词汇"]):
         return "英语"
-    if any(token in text for token in ["力", "电路", "速度", "加速度", "压强", "牛顿"]):
+    if any(token in text for token in ["力", "电路", "速度", "加速度", "压强", "牛顿", "电流", "电压", "电阻", "磁场", "功", "能", "功率", "浮力", "密度", "光", "波", "热"]):
         return "物理"
-    if any(token in text for token in ["化学", "反应", "离子", "方程式", "溶液"]):
+    if any(token in text for token in ["化学", "反应", "离子", "方程式", "溶液", "元素", "分子", "原子", "酸碱", "氧化", "还原", "沉淀", "气体"]):
         return "化学"
-    if any(token in lower for token in ["python", "java", "算法", "代码", "递归"]):
+    if any(token in text for token in ["生物", "细胞", "遗传", "基因", "光合", "呼吸", "酶", "DNA", "RNA", "蛋白质", "生态"]):
+        return "生物"
+    if any(token in text for token in ["语文", "古诗", "文言文", "作文", "阅读理解", "修辞", "描写", "论证", "作者"]):
+        return "语文"
+    if any(token in lower for token in ["python", "java", "算法", "代码", "递归", "循环", "数组", "排序", "编程"]):
         return "计算机"
     return "综合"
 
 
 def infer_error_type(text):
     mapping = [
-        ("概念混淆", ["概念", "定义", "性质", "公式", "定理", "不知道为什么"]),
-        ("审题偏差", ["题意", "条件", "没看清", "问什么", "范围"]),
-        ("步骤遗漏", ["漏", "少写", "跳步", "步骤", "过程"]),
-        ("计算失误", ["算错", "计算", "符号", "小数", "单位"]),
-        ("方法误用", ["方法", "套公式", "模型", "思路"]),
-        ("逻辑跳跃", ["推不出", "为什么", "逻辑", "所以"]),
+        ("概念混淆", ["概念", "定义", "性质", "公式", "定理", "混淆", "搞混", "记错", "不知道", "不理解", "没学过"]),
+        ("审题偏差", ["题意", "条件", "没看清", "问什么", "范围", "漏看", "看错", "忽略了", "没注意到", "审题"]),
+        ("步骤遗漏", ["漏", "少写", "跳步", "步骤", "过程", "不完整", "缺少", "没写全"]),
+        ("计算失误", ["算错", "计算", "符号", "小数", "单位", "粗心", "加错", "减错", "乘错", "除错", "代错"]),
+        ("方法误用", ["方法", "套公式", "模型", "思路", "选错", "用错", "不合适", "不适用", "解法"]),
+        ("逻辑跳跃", ["推不出", "为什么", "逻辑", "所以", "推理", "因果", "跳跃", "矛盾"]),
     ]
     for error_type, keys in mapping:
         if any(key in text for key in keys):
@@ -102,37 +108,148 @@ def infer_error_type(text):
 
 
 def extract_tags(text):
-    candidates = ["函数", "方程", "几何", "概率", "导数", "阅读理解", "语法", "力学", "电路", "化学方程式", "算法"]
+    candidates = ["函数", "方程", "几何", "概率", "导数", "积分", "数列", "三角", "向量", "不等式",
+                  "阅读理解", "语法", "时态", "从句", "作文", "文言文",
+                  "力学", "电路", "磁场", "光学", "热学", "运动", "能量",
+                  "化学方程式", "氧化还原", "酸碱", "有机", "无机",
+                  "遗传", "细胞", "生态", "代谢",
+                  "算法", "数据结构", "递归", "循环"]
     tags = [tag for tag in candidates if tag in text]
     if not tags:
         tags = [infer_subject(text), infer_error_type(text)]
     return list(dict.fromkeys(tags))[:4]
 
 
-def local_diagnosis(user_text):
+def local_diagnosis(user_text, has_image=False):
     subject = infer_subject(user_text)
     error_type = infer_error_type(user_text)
     tags = extract_tags(user_text)
-    focus = "、".join(tags)
+    focus = "、".join(tags) if tags else "综合"
 
-    answer = (
-        f"我先按“错题问诊”的方式帮你拆一下。\n\n"
-        f"初步判断：这道题更像是{subject}问题，主要错误类型可能是「{error_type}」。"
-        f"你现在的问题不是单纯缺答案，而是需要把题目条件、解题路径和错误发生点重新对齐。\n\n"
-        f"建议复盘路径：\n"
-        f"1. 先用一句话复述题目到底要求什么，圈出限制条件。\n"
-        f"2. 把你的原解法按步骤写出来，标出第一处“不确定但继续往下做”的位置。\n"
-        f"3. 对照标准思路，判断错误是来自概念、条件读取、方法选择还是计算执行。\n"
-        f"4. 做一道同知识点的变式题，确认不是“看懂答案”式的假会。\n\n"
-        f"我想追问你一个关键点：你当时是从哪个条件开始想到这个方法的？"
-        f"如果你把原题和自己的解题步骤补充给我，我可以继续定位到具体错误节点。"
+    lower = user_text.strip().lower()
+
+    # ====== 1. 问候 / 闲聊 ======
+    greetings = ["你好", "hi", "hello", "嗨", "在吗", "在不在", "早上好", "下午好", "晚上好"]
+    if any(g in lower for g in greetings) or (len(user_text) <= 5 and not has_image):
+        answer = (
+            '\U0001f44b 赛博错题医生 24 小时在线为您服务！\n\n'
+            '您好！很高兴能帮助您诊断学习中的\u201c小毛病\u201d \U0001fa7a\n\n'
+            '请把您遇到的题目、您尝试的解题过程或者任何困惑告诉我吧！\n'
+            '我是您的 AI 认知教练，会像一位耐心又专业的医生一样，\n'
+            '引导您找到问题根源，修复认知偏差，让您下次遇到类似问题时，\n'
+            '能够充满自信地独立解决！\U0001f4aa\n\n'
+            '期待您的提问哦！\u2728'
+        )
+        return answer, _make_mistake(user_text, subject, error_type, tags, focus)
+
+    # ====== 2. 感谢 / 告别 ======
+    thanks = ["谢谢", "感谢", "多谢", "辛苦了", "拜拜", "再见", "bye"]
+    if any(t in lower for t in thanks):
+        answer = "😊 不客气！随时欢迎回来继续问诊。学习路上，我一直都在。加油！💪"
+        return answer, _make_mistake(user_text, subject, error_type, tags, focus)
+
+    # ====== 3. 图片上传（带或不带文字描述） ======
+    if has_image:
+        answer = "📷 正在识别图片..."
+        return answer, _make_mistake(user_text, subject, error_type, tags, focus)
+
+    # ====== 4. 询问功能 / 自述 ======
+    ask_self = ["你是谁", "你能做什么", "功能", "怎么用", "帮助"]
+    if any(a in lower for a in ask_self):
+        answer = (
+            "🤖 我是赛博错题医生，你的 AI 认知教练！\n\n"
+            "我能帮你：\n"
+            "🔍 诊断错题 — 分析你的解题过程，定位错误节点\n"
+            "🧠 根因分析 — 判断是概念混淆、审题偏差还是计算失误\n"
+            "💬 追问引导 — 用苏格拉底式提问帮你自己发现错误\n"
+            "✅ 正确思路 — 给出清晰的分步解答\n"
+            "📚 巩固建议 — 推荐同类变式题策略\n\n"
+            "👉 直接发一道错题过来试试吧！"
+        )
+        return answer, _make_mistake(user_text, subject, error_type, tags, focus)
+
+    # ====== 5. 真正的错题诊断 ======
+    has_question_indicators = any(
+        k in user_text
+        for k in ["题", "问", "怎么做", "为什么", "哪里错", "求", "计算", "证明", "解", "答案", "步骤"]
     )
 
-    mistake = {
+    if has_question_indicators or len(user_text) > 30:
+        answer = (
+            f"🔍 初步诊断：这道题属于 **{subject}** 方向，\n"
+            f"从你的描述来看，可能的错误类型是「{error_type}」。\n\n"
+            f"咱们按这个思路来复盘：\n"
+            f"1. 先确认题目到底问什么，圈出已知条件和求解目标\n"
+            f"2. 回想你当时是怎么一步步做的，找出第一处犹豫的地方\n"
+            f"3. 判断那个犹豫是因为：搞混了概念？看漏了条件？还是方法没选对？\n"
+            f"4. 然后重新走一遍正确思路，用变式题验证是否真懂了\n\n"
+            f"💡 如果你把原始作答过程补上来，我可以精准定位到具体错误节点。\n"
+            f"你不妨先说说：你当时是从哪个条件开始觉得不对劲的？"
+        )
+    else:
+        # ====== 6. 简短消息 / 不确定意图 ======
+        answer = (
+            f"😊 你好！看起来你想和我聊点什么？\n\n"
+            f"我主要擅长的是 **错题诊断**——你可以：\n"
+            f"📝 直接发一道错题\n"
+            f"📝 贴上你的原始解答过程\n"
+            f"📝 告诉我你困惑的地方\n\n"
+            f"我会帮你定位错误、分析根因、给出正确思路和巩固建议！\n"
+            f"请随便发一道题来试试吧～"
+        )
+
+    return answer, _make_mistake(user_text, subject, error_type, tags, focus)
+
+
+def _make_mistake(user_text, subject, error_type, tags, focus):
+    """构建错题记录"""
+    # Heuristic mastery level based on user's actual question signals
+    lower = user_text.lower()
+    base = 50
+
+    # Positive signals: user shows their own work / reasoning
+    if any(k in user_text for k in ["我算", "我写", "我得", "我做", "我求", "答", "解", "步骤", "过程"]):
+        base += 15
+    # User is verifying (shows some confidence)
+    if any(k in lower for k in ["对吗", "是不是", "对不对", "验证", "检查"]):
+        base += 8
+    # User asks for deeper understanding (engaged but confused)
+    if any(k in lower for k in ["为什么", "怎么做", "怎么求", "怎么算", "不理解"]):
+        base -= 8
+    # User expresses pure confusion / helplessness
+    if any(k in lower for k in ["不会", "不懂", "不明白", "不知道", "搞混", "总是", "经常"]):
+        base -= 12
+
+    # Error-type based adjustment
+    type_mod = {
+        "概念混淆": -15,
+        "逻辑跳跃": -8,
+        "审题偏差": -3,
+        "步骤遗漏": +2,
+        "计算失误": +10,
+        "方法误用": -5,
+        "思路不完整": -5,
+    }
+    base += type_mod.get(error_type, 0)
+
+    # Question length indicates detail level
+    if len(user_text) < 15:
+        base -= 5
+    elif len(user_text) > 60:
+        base += 5
+
+    # Small variance based on text (deterministic but feels varied)
+    import hashlib
+    h = int(hashlib.md5(user_text.encode()).hexdigest()[:4], 16)
+    base += (h % 11) - 5  # ±5 jitter
+
+    level = max(15, min(95, base))
+    return {
         "id": uuid.uuid4().hex,
         "title": build_title(user_text),
         "subject": subject,
         "error_type": error_type,
+        "level": level,
         "tags": tags,
         "question": user_text,
         "wrong_step": "等待用户补充原始作答步骤",
@@ -145,7 +262,6 @@ def local_diagnosis(user_text):
         ],
         "created_at": now_iso(),
     }
-    return answer, mistake
 
 
 def build_title(text):
@@ -154,7 +270,7 @@ def build_title(text):
     return (cleaned[:22] + "...") if len(cleaned) > 24 else cleaned or "未命名错题"
 
 
-def call_gemini(user_text, history, image_base64=None):
+def call_gemini(user_text, history, image_base64=None, image_mime="image/png"):
     """调用 Google Gemini 进行诊断（支持文本和图片）"""
     if not GEMINI_API_KEY:
         return None
@@ -195,7 +311,7 @@ def call_gemini(user_text, history, image_base64=None):
     if image_base64:
         parts = [
             {"text": user_text or "请识别这张图片中的题目，并进行分析。"},
-            {"inline_data": {"mime_type": "image/jpeg", "data": image_base64}},
+            {"inline_data": {"mime_type": image_mime, "data": image_base64}},
         ]
     else:
         parts = [{"text": user_text}]
@@ -206,13 +322,108 @@ def call_gemini(user_text, history, image_base64=None):
         "contents": contents,
     }
 
-    resp = requests.post(url, json=body, timeout=60)
-    data = resp.json()
+    timeout = 30 if image_base64 else 10
 
-    if "candidates" in data and len(data["candidates"]) > 0:
-        candidate = data["candidates"][0]
-        if "content" in candidate and "parts" in candidate["content"]:
-            return candidate["content"]["parts"][0].get("text", None)
+    try:
+        resp = requests.post(url, json=body, timeout=timeout)
+        data = resp.json()
+
+        if "candidates" in data and len(data["candidates"]) > 0:
+            candidate = data["candidates"][0]
+            if "content" in candidate and "parts" in candidate["content"]:
+                return candidate["content"]["parts"][0].get("text", None)
+
+        # 记录 API 错误
+        if "error" in data:
+            print(f"[Gemini] API错误: {data['error']}")
+    except requests.exceptions.Timeout:
+        print("[Gemini] 请求超时，回退本地诊疗模式")
+    except requests.exceptions.ConnectionError:
+        print("[Gemini] 网络无法连接，回退本地诊疗模式")
+    except Exception as exc:
+        print(f"[Gemini] 调用异常: {exc}")
+    return None
+
+
+def call_zhipu(user_text, history, image_base64=None, image_mime="image/png"):
+    """调用智谱 API 进行诊断（支持文本和图片）"""
+    if not ZHIPU_API_KEY:
+        return None
+
+    url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+
+    system_prompt = (
+        '你是"赛博错题医生"，一个面向学生的AI认知教练。你的核心任务不是直接给答案，而是：\n\n'
+        '诊疗流程：\n'
+        '1. 初步诊断：快速判断题目学科、知识点和难度\n'
+        '2. 错误定位：如果用户提供了作答过程，精准定位第一处错误节点\n'
+        '3. 根因分析：区分错误类型\u2014\u2014概念混淆/审题偏差/步骤遗漏/逻辑跳跃/计算失误/方法误用\n'
+        '4. 苏格拉底式追问：不要直接说「你错了」，而是用提问引导反思\n'
+        '5. 认知修复：给出正确思路，但要强调理解而非记忆\n'
+        '6. 巩固建议：推荐同类变式题的解题策略\n\n'
+        '输出时请使用纯文本格式，不要使用Markdown语法（不要用 ###、**、* 等符号），也不要用LaTeX数学公式（不要用 \\( \\) \\[ \\] \\frac \\int \\sum 等）。\n'
+        '数学表达式请用普通文字描述，如"积分 x·cosx dx"、"x的平方"等。\n'
+        '用emoji和自然换行来组织内容结构。示例：\n'
+        '\U0001f50d 初步诊断：学科/知识点/难度\n'
+        '\u274c 错误定位：第几步出了问题\n'
+        '\U0001f9e0 根因分析：为什么出错（认知层面）\n'
+        '\U0001f4ac 追问引导：1-2个引导学生反思的问题\n'
+        '\u2705 正确思路：清晰的分步解答\n'
+        '\U0001f4da 巩固建议：同类题策略 + 知识点梳理\n\n'
+        '核心原则：\n'
+        '- 永远保持鼓励和耐心，像一位好老师\n'
+        '- 引导学生自己发现错误，而非直接指出\n'
+        '- 关注思维过程，而非仅仅答案对错\n'
+        '- 用通俗语言解释复杂概念'
+    )
+
+    messages = [{"role": "system", "content": system_prompt}]
+
+    for item in history[-8:]:
+        role = "assistant" if item["role"] == "assistant" else "user"
+        messages.append({"role": role, "content": item["content"]})
+
+    if image_base64:
+        model = ZHIPU_VISION_MODEL
+        user_content = [
+            {"type": "text", "text": user_text or "请识别这张图片中的题目，并进行分析。"},
+            {"type": "image_url", "image_url": {"url": f"data:{image_mime};base64,{image_base64}"}},
+        ]
+    else:
+        model = ZHIPU_TEXT_MODEL
+        user_content = user_text
+
+    messages.append({"role": "user", "content": user_content})
+
+    body = {
+        "model": model,
+        "messages": messages,
+        "stream": False,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {ZHIPU_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    timeout = 60 if image_base64 else 30
+
+    try:
+        resp = requests.post(url, json=body, headers=headers, timeout=timeout)
+        data = resp.json()
+
+        if "choices" in data and len(data["choices"]) > 0:
+            return data["choices"][0]["message"]["content"]
+
+        if "error" in data:
+            print(f"[智谱] API错误: {data['error']}")
+    except requests.exceptions.Timeout:
+        print("[智谱] 请求超时")
+    except requests.exceptions.ConnectionError:
+        print("[智谱] 网络无法连接")
+    except Exception as exc:
+        print(f"[智谱] 调用异常: {exc}")
+
     return None
 
 
@@ -374,7 +585,11 @@ def static_files(path):
 
 @app.get("/api/health")
 def health():
-    return jsonify({"ok": True, "model": GEMINI_MODEL, "llm_enabled": bool(GEMINI_API_KEY)})
+    return jsonify({
+        "ok": True,
+        "model": f"{ZHIPU_TEXT_MODEL} / {ZHIPU_VISION_MODEL}",
+        "llm_enabled": bool(ZHIPU_API_KEY),
+    })
 
 
 @app.get("/api/history")
@@ -416,25 +631,44 @@ def chat():
     store = load_store()
     session = get_or_create_session(store, session_id)
 
-    # 如果有图片，先去除data:前缀，直接传图片给 Gemini 做多模态分析
+    # 如果有图片，先去除data:前缀，提取MIME类型
+    image_mime = None
     if image_base64:
         if "," in image_base64:
-            image_base64 = image_base64.split(",", 1)[1]
+            # "data:image/png;base64,xxxx" → mime="image/png", data="xxxx"
+            header, data = image_base64.split(",", 1)
+            image_base64 = data
+            if ":" in header and ";" in header:
+                image_mime = header.split(":", 1)[1].split(";", 1)[0]
+        if not image_mime:
+            image_mime = "image/png"
 
     session["messages"].append({"role": "user", "content": user_text, "created_at": now_iso()})
     if session["title"] == "新的错题问诊":
         session["title"] = build_title(user_text)
 
-    local_answer, mistake = local_diagnosis(user_text)
+    local_answer, mistake = local_diagnosis(user_text, has_image=bool(image_base64))
 
     try:
-        # Gemini 一站式处理：文本或图片+文本
-        answer = call_gemini(user_text, session["messages"], image_base64)
+        answer = call_zhipu(user_text, session["messages"], image_base64, image_mime)
         if answer is None:
-            answer = local_answer
-    except Exception as exc:
+            if image_base64:
+                answer = (
+                    "📷 图片已收到，但 AI 服务当前不可用。\n\n"
+                    "请把题目内容用文字发给我，我会帮你诊断！\n"
+                    "比如：这道题是什么学科？题目问什么？你卡在哪一步？"
+                )
+            else:
+                answer = local_answer
+    except Exception:
         answer = local_answer
-        answer += f"\n\n（LLM调用失败，已切换本地诊疗模式：{exc}）"
+
+    # 用 AI 回复内容 + 用户问题重新推断错题元数据，让分析页更精准
+    combined = user_text + " " + (answer or "")
+    if answer and answer != local_answer:
+        mistake["subject"] = infer_subject(combined)
+        mistake["error_type"] = infer_error_type(combined)
+        mistake["tags"] = extract_tags(combined)
 
     mistake["session_id"] = session["id"]
     store["mistakes"].insert(0, mistake)

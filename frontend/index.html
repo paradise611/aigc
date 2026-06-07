@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>赛博错题医生</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
   </head>
   <body>
@@ -28,6 +31,16 @@
             错题分析
           </button>
         </nav>
+
+        <section class="history-panel">
+          <div class="history-header">
+            <span class="history-header__title">📋 历史记录</span>
+            <button class="history-clear-btn" id="clearHistoryBtn" title="清空全部历史">清空</button>
+          </div>
+          <div class="history-list" id="historyList">
+            <div class="history-empty">暂无历史记录</div>
+          </div>
+        </section>
 
         <section class="status-panel">
           <div class="status-row">
